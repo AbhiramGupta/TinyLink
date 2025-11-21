@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TinyLink - Url Shrinker</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f8fafc;
+      color: #111;
+      margin: 0;
+      padding: 32px
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .06)
+    }
+
+    h1 {
+      margin-top: 0
+    }
+
+    form {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap
+    }
+
+    input[type="text"],
+    input[type="url"] {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      flex: 1;
+      min-width: 220px
+    }
+
+    button {
+      padding: 8px 12px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+      text-align: left
+    }
+
+    a.short {
+      color: #1e40af;
+      font-weight: 600
+    }
+
+    .small {
+      font-size: 0.85rem;
+      color: #666
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 16px;
+      }
+
+      .container {
+        padding: 12px;
+      }
+
+      form {
+        flex-direction: column;
+      }
+
+      input[type="text"] {
+        width: 100%;
+        min-width: 0;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 8px;
+      }
+
+      table,
+      thead,
+      tbody,
+      th,
+      td,
+      tr {
+        display: block;
+      }
+
+      thead tr {
+        display: none;
+      }
+
+      /* hide header on tiny */
+      tbody tr {
+        margin-bottom: 12px;
+        border: 1px solid #eee;
+        padding: 8px;
+        border-radius: 6px;
+      }
+
+      tbody td {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+      }
+    }
+
+    @media (min-width: 481px) and (max-width: 768px) {
+      form {
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      input[type="text"] {
+        min-width: 100%;
+      }
+
+      button {
+        align-self: flex-start;
+      }
+    }
+
+    @media (min-width: 1200px) {
+      .container {
+        max-width: 1100px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <h1>TinyLink - Url Shrinker</h1>
+
+    <form action="/shorten" method="post">
+      <input type="text" name="FullUrl" placeholder="https://example.com or example.com" required />
+      <input type="text" name="customCode" placeholder="Custom code (optional)" />
+      <button type="submit">Shrink</button>
+    </form>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Full Url</th>
+          <th>Short Url</th>
+          <th>Clicks</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (!links || links.length===0) { %>
+          <tr>
+            <td colspan="4" class="small">No links yet</td>
+          </tr>
+          <% } else { %>
+            <% links.forEach(link=> { %>
+              <tr>
+                <td><a href="<%= link.target_url %>" target="_blank" rel="noopener">
+                    <%= link.target_url %>
+                  </a></td>
+                <td><a class="short" href="/<%= link.code %>">
+                    <%= baseUrl %>/<%= link.code %>
+                  </a></td>
+                <td>
+                  <%= link.total_clicks %>
+                </td>
+                <td>
+                  <form action="/delete/<%= link.code %>" method="post" style="display:inline">
+                    <button type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              <% }) %>
+                <% } %>
+      </tbody>
+    </table>
+  </main>
+</body>
+
+</html>
