@@ -152,49 +152,64 @@
 <body>
   <main class="container">
     <h1>TinyLink - Url Shrinker</h1>
+    
+    <% if (typeof error !=="undefined" && error) { %>
+      <div style="
+      background:#fde2e2;
+      color:#b91c1c;
+      padding:10px;
+      border-radius:6px;
+      margin-bottom:15px;
+      border:1px solid #fca5a5;
+      font-size:0.9rem;
+    ">
+        <%= error %>
+      </div>
+      <% } %>
 
-    <form action="/shorten" method="post">
-      <input type="text" name="FullUrl" placeholder="https://example.com or example.com" required />
-      <input type="text" name="customCode" placeholder="Custom code (optional)" />
-      <button type="submit">Shrink</button>
-    </form>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Full Url</th>
-          <th>Short Url</th>
-          <th>Clicks</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% if (!links || links.length===0) { %>
-          <tr>
-            <td colspan="4" class="small">No links yet</td>
-          </tr>
-          <% } else { %>
-            <% links.forEach(link=> { %>
+        <form action="/shorten" method="post">
+          <input type="text" name="FullUrl" placeholder="https://example.com or example.com" required />
+          <input type="text" name="customCode" placeholder="Custom code (optional)" />
+          <button type="submit">Shrink</button>
+        </form>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Full Url</th>
+              <th>Short Url</th>
+              <th>Clicks</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!links || links.length===0) { %>
               <tr>
-                <td><a href="<%= link.target_url %>" target="_blank" rel="noopener">
-                    <%= link.target_url %>
-                  </a></td>
-                <td><a class="short" href="/<%= link.code %>">
-                    <%= baseUrl %>/<%= link.code %>
-                  </a></td>
-                <td>
-                  <%= link.total_clicks %>
-                </td>
-                <td>
-                  <form action="/delete/<%= link.code %>" method="post" style="display:inline">
-                    <button type="submit">Delete</button>
-                  </form>
-                </td>
+                <td colspan="4" class="small">No links yet</td>
               </tr>
-              <% }) %>
-                <% } %>
-      </tbody>
-    </table>
+              <% } else { %>
+                <% links.forEach(link=> { %>
+                  <tr>
+                    <td><a href="<%= link.target_url %>" target="_blank" rel="noopener">
+                        <%= link.target_url %>
+                      </a></td>
+                    <td><a class="short" href="/<%= link.code %>">
+                        <%= baseUrl %>/<%= link.code %>
+                      </a></td>
+                    <td>
+                      <%= link.total_clicks %>
+                    </td>
+                    <td>
+                      <form action="/delete/<%= link.code %>" method="post" style="display:inline">
+                        <button type="submit">Delete</button>
+                      </form>
+                    </td>
+                  </tr>
+                  <% }) %>
+                    <% } %>
+          </tbody>
+        </table>
   </main>
 </body>
 

@@ -1,3 +1,4 @@
+
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -5,10 +6,12 @@ import { customAlphabet } from "nanoid";
 import bodyParser from "body-parser";
 import pg from "pg";
 import dotenv from "dotenv";
+import dns from "dns";
 
 dotenv.config();
 
 const { Client } = pg;
+const dnsLookup = dns.promises.lookup;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,78 +34,123 @@ db.connect()
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-
 const nano = customAlphabet("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 6);
 
+async function fetchLinks() {
+  const r = await db.query(
+    "SELECT code, target_url, total_clicks, last_clicked FROM links WHERE deleted = false ORDER BY created_at DESC"
+  );
+  return r.rows;
+}
+
+async function isValidUrlResolved(urlString) {
+  try {
+    const url = new URL(urlString);
+
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+
+    const hostname = url.hostname;
+
+    if (!hostname || !hostname.includes(".")) return false;
+    if (hostname.endsWith(".")) return false;
+    if (!/^[a-zA-Z0-9.-]+$/.test(hostname)) return false;
+    const labels = hostname.split(".");
+    for (const lab of labels) {
+      if (!lab.length) return false;
+      if (lab.startsWith("-") || lab.endsWith("-")) return false;
+    }
+
+    try {
+      await dnsLookup(hostname);
+      return true;
+    } catch (dnsErr) {
+      return false;
+    }
+  } catch (e) {
+    return false;
+  }
+}
 
 app.get("/", async (req, res) => {
   try {
-    const result = await db.query(
-      "SELECT code, target_url, total_clicks, last_clicked FROM links WHERE deleted = false ORDER BY created_at DESC"
-    );
-    const links = result.rows;
-
-    res.render("index", { links, baseUrl: BASE_URL });
-
+    const links = await fetchLinks();
+    return res.render("index", { links, baseUrl: BASE_URL, error: null });
   } catch (err) {
-    console.log(err);
-    res.status(500).send("Server error");
+    console.error("GET / error:", err);
+    return res.status(500).send("Server error");
   }
 });
-
 
 app.post("/shorten", async (req, res) => {
   const { FullUrl, customCode } = req.body;
 
   if (!FullUrl) {
-    return res.status(400).send("URL required");
+    const links = await fetchLinks();
+    return res.render("index", { links, baseUrl: BASE_URL, error: "Please provide a URL." });
   }
 
-  let normalized = FullUrl;
-  try {
-    const u = new URL(FullUrl);
-    normalized = u.toString();
-  } catch (e) {
-    try {
-      normalized = new URL("https://" + FullUrl).toString();
-    } catch (_) {
-      return res.status(400).send("Invalid URL");
-    }
+  let normalized = FullUrl.trim();
+  if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+    normalized = "https://" + normalized;
+  }
+
+  const ok = await isValidUrlResolved(normalized);
+  if (!ok) {
+    const links = await fetchLinks();
+    return res.render("index", { links, baseUrl: BASE_URL, error: "Invalid or non-resolving URL. Please enter a valid domain (e.g. example.com)." });
   }
 
   let code = customCode && customCode.trim() ? customCode.trim() : null;
 
   if (code) {
-    const exists = await db.query("SELECT 1 FROM links WHERE code = $1", [code]);
-    if (exists.rowCount > 0) {
-      return res.status(409).send("Custom code already exists");
-    }
     if (!/^[A-Za-z0-9]{3,8}$/.test(code)) {
-      return res.status(400).send("Code must be 3-8 letters/digits");
+      const links = await fetchLinks();
+      return res.render("index", { links, baseUrl: BASE_URL, error: "Custom code must be 3-8 alphanumeric characters" });
+    }
+    try {
+      const exists = await db.query("SELECT 1 FROM links WHERE code = $1", [code]);
+      if (exists.rowCount > 0) {
+        const links = await fetchLinks();
+        return res.render("index", { links, baseUrl: BASE_URL, error: "Custom code already exists" });
+      }
+    } catch (err) {
+      console.error("DB error checking custom code:", err);
+      const links = await fetchLinks();
+      return res.render("index", { links, baseUrl: BASE_URL, error: "Server error checking custom code" });
     }
   } else {
-    
     for (let i = 0; i < 10; i++) {
       const candidate = nano();
-      const exists = await db.query("SELECT 1 FROM links WHERE code = $1", [candidate]);
-      if (exists.rowCount === 0) {
-        code = candidate;
-        break;
+      try {
+        const exists = await db.query("SELECT 1 FROM links WHERE code = $1", [candidate]);
+        if (exists.rowCount === 0) {
+          code = candidate;
+          break;
+        }
+      } catch (err) {
+        console.error("DB error while checking candidate code:", err);
       }
+    }
+    if (!code) {
+      code = nano() + Math.floor(Math.random() * 1000);
     }
   }
 
-  
-  await db.query(
-    "INSERT INTO links(code, target_url) VALUES ($1, $2)",
-    [code, normalized]
-  );
-
-  res.redirect("/");
+  try {
+    await db.query("INSERT INTO links(code, target_url) VALUES ($1, $2)", [code, normalized]);
+    return res.redirect("/");
+  } catch (err) {
+    console.error("Insert error:", err);
+    if (err && err.code === "23505") {
+      const links = await fetchLinks();
+      return res.render("index", { links, baseUrl: BASE_URL, error: "Generated code collided — please try again." });
+    }
+    const links = await fetchLinks();
+    return res.render("index", { links, baseUrl: BASE_URL, error: "Server error creating short link" });
+  }
 });
 
 app.get('/healthz', async (req, res) => {
@@ -135,18 +183,29 @@ app.get("/:code", async (req, res) => {
     RETURNING target_url
   `;
 
-  const r = await db.query(query, [code]);
-
-  if (r.rowCount === 0) return res.status(404).send("Not found");
-
-  const target = r.rows[0].target_url;
-  res.redirect(target);
+  try {
+    const r = await db.query(query, [code]);
+    if (r.rowCount === 0) {
+      return res.status(404).send("Not found");
+    }
+    const target = r.rows[0].target_url;
+    return res.redirect(target);
+  } catch (err) {
+    console.error("Redirect error:", err);
+    return res.status(500).send("Server error");
+  }
 });
 
 app.post("/delete/:code", async (req, res) => {
   const { code } = req.params;
-  await db.query("UPDATE links SET deleted = true WHERE code = $1", [code]);
-  res.redirect("/");
+  try {
+    await db.query("UPDATE links SET deleted = true WHERE code = $1", [code]);
+    return res.redirect("/");
+  } catch (err) {
+    console.error("Delete error:", err);
+    const links = await fetchLinks();
+    return res.render("index", { links, baseUrl: BASE_URL, error: "Server error deleting link" });
+  }
 });
 
 app.listen(port, () => {
