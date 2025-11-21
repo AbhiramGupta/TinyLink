@@ -61,7 +61,7 @@ app.post("/shorten", async (req, res) => {
   if (!FullUrl) {
     return res.status(400).send("URL required");
   }
-L
+
   let normalized = FullUrl;
   try {
     const u = new URL(FullUrl);
